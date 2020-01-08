@@ -133,6 +133,9 @@ public class EventBatchProcessor {
                 Double weightDiff = tagWeight - previousWeight;
 
                 for (String similarDocId : termStringMap.keySet()) {
+                    if (similarDocId.equals(docId)) {
+                        continue;
+                    }
 
                     docIdsToBeUpdated.add(similarDocId);
 
