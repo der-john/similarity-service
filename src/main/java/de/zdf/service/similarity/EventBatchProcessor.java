@@ -95,10 +95,11 @@ public class EventBatchProcessor {
 
 
     private void waitForRedis(Jedis jedis)  {
-        boolean isRedisHealthy = false;
+        boolean isRedisHealthy = "PONG".equals(jedis.ping());
         while (!isRedisHealthy) {
             isRedisHealthy = "PONG".equals(jedis.ping());
             try {
+                LOGGER.info("Waiting for Redis.");
                 Thread.sleep(1000);
             } catch (InterruptedException e) {
                 e.printStackTrace();
