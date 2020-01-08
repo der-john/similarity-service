@@ -169,18 +169,14 @@ public class EventBatchProcessor {
             Map<String, String> indicators = jedis.hgetAll(key);
             String indicatorFields = buildIndicatorsField(indicators, tagProvider);
             if (!indicatorFields.isEmpty()) {
-                String indicatorFieldsAsJsonString = null;
-                try {
-                    indicatorFieldsAsJsonString = String.format(elasticsearchRequestManager.getIndicatorsUpdateRequestTemplate(),
-                            mapper.writeValueAsString(indicatorFields));
-                } catch (JsonProcessingException e) {
-                    e.printStackTrace();
-                }
+                String indicatorFieldsAsJsonString = String.format(
+                        elasticsearchRequestManager.getIndicatorsUpdateRequestTemplate(),
+                        indicatorFields);
                 if (indicatorFieldsAsJsonString != null) {
                     String updateRequest = elasticsearchRequestManager.buildIndicatorsUpdateRequest(id, indicatorFieldsAsJsonString);
                     updateRequests.add(updateRequest);
 
-                    LOGGER.info("This is an update request: " + updateRequest);
+                    // LOGGER.info("This is an update request: " + updateRequest);
                 }
             }
         }
