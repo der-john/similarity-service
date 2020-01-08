@@ -133,7 +133,7 @@ public class EventBatchProcessor {
                 Double previousWeight = 0d;
                 if (previousWeightString != null) {
                     previousWeight = Double.parseDouble(previousWeightString);
-                    if (previousWeight.equals(tagWeight)) {
+                    if (isMoreOrLessEqual(previousWeight, tagWeight)) {
                         continue;
                     } else {
                         previousWeight = Double.parseDouble(previousWeightString);
@@ -172,6 +172,21 @@ public class EventBatchProcessor {
         // LOGGER.info("These are the docIdsToBeUpdated: " + docIdsToBeUpdated);
 
         return docIdsToBeUpdated;
+    }
+
+    private static final boolean isMoreOrLessEqual(Double previousWeight, Double tagWeight) {
+        if (tagWeight.equals(previousWeight)) {
+            return true;
+        }
+
+        if (0.9 * previousWeight > tagWeight || 1.1 * previousWeight < tagWeight) {
+            return true;
+        }
+
+        if (tagWeight - previousWeight < 0.01 || previousWeight - tagWeight < 0.01) {
+            return true;
+        }
+        return false;
     }
 
     private List<String> generateUpdateRequests(Jedis jedis, String tagProvider, Set<String> docIdsToBeUpdated) {
