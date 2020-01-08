@@ -8,6 +8,7 @@ import de.zdf.service.similarity.config.ElasticsearchConfig;
 import de.zdf.service.similarity.config.RedisConfig;
 import de.zdf.service.similarity.elasticsearch.ElasticsearchRequestManager;
 import org.apache.commons.collections.MapUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.http.StatusLine;
 import org.elasticsearch.client.Response;
 import org.elasticsearch.client.RestClient;
@@ -63,6 +64,13 @@ public class EventBatchProcessor {
                         String dataString = DECODER.decode(record.getData()).toString();
                         ObjectNode kinesisJson = (ObjectNode) MAPPER.readTree(dataString);
 
+                        String docIdToBeDeleted = checkActionAndGetId(kinesisJson);
+                        if (docIdToBeDeleted != null) {
+                            List<String> docIdsToBeUpdated = removeIndicators(jedis, docIdToBeDeleted, tagProvider);
+                            updatedDocIdsInBatch.addAll(docIdsToBeUpdated);
+                            continue;
+                        }
+
                         String docId = kinesisJson.get("docId").textValue();
                         tagProvider = kinesisJson.get("tagProvider").textValue();
 
@@ -102,6 +110,28 @@ public class EventBatchProcessor {
                 processTimeInMs/records.size());
     }
 
+    private List<String> removeIndicators(Jedis jedis, String docIdToBeDeleted, String tagProvider) {
+        List<String> docIdsToBeUpdated = new ArrayList<>();
+        String indicatorsKey = getIndicatorsKey(tagProvider, docIdToBeDeleted);
+        Map<String, String> indicatorsMap = jedis.hgetAll(indicatorsKey);
+        for (String affectedDocId : indicatorsMap.keySet()) {
+            String affectedIndicatorsKey = getIndicatorsKey(tagProvider, affectedDocId);
+            jedis.hdel(affectedIndicatorsKey, docIdToBeDeleted);
+            docIdsToBeUpdated.add(affectedDocId);
+        }
+        return docIdsToBeUpdated;
+    }
+
+    private String checkActionAndGetId (JsonNode jsonObject) {
+        String action = jsonObject.get("action").textValue();
+        if (StringUtils.equals(action, "delete")) {
+            String docId = jsonObject.get("_id").textValue();
+            if (StringUtils.isNotBlank(docId)) {
+                return docId;
+            }
+        }
+        return null;
+    }
 
     private void waitForRedis(Jedis jedis)  {
         boolean isRedisHealthy = "PONG".equals(jedis.ping());
