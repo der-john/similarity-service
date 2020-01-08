@@ -53,10 +53,9 @@ public class EventBatchProcessor {
     public void processEventBatch(final List<Record> records) {
         long bulkStartTime = System.nanoTime();
 
-        int tagCount = 0;
-        int deletedDocCount = 0;
         try (JedisPool pool = new JedisPool(redisConfig.getHost(), redisConfig.getPort())) {
             try (Jedis jedis = pool.getResource()) {
+                List<String> updateRequestsForBatch = new ArrayList<>();
                 for (Record record : records) {
                     try {
                         String dataString = DECODER.decode(record.getData()).toString();
@@ -71,9 +70,9 @@ public class EventBatchProcessor {
 
                         List<String> updateRequests = calculateIndicators(jedis, docId, tagProvider, tagMap);
 
-                        final RestClient restClient = elasticsearchRequestManager.getRestClient();
-                        updateDocuments(restClient, updateRequests);
+                        updateRequestsForBatch.addAll(updateRequests);
 
+                        LOGGER.info("Received {} update requests.", updateRequests.size());
 
                     } catch (IOException e) {
                         LOGGER.error("IO Exception: ", e);
@@ -81,17 +80,17 @@ public class EventBatchProcessor {
                         LOGGER.error("Couldn't process the following record: " + record, e);
                     }
                 }
+
+                final RestClient restClient = elasticsearchRequestManager.getRestClient();
+                updateDocuments(restClient, updateRequestsForBatch);
             }
         }
         long bulkEndTime = System.nanoTime();
         final double processTimeInMs = (bulkEndTime - bulkStartTime) / (1000 * 1000.);
-        LOGGER.info("Processing time: {} ms for {} entries, giving us an average of {} ms per item",
+        LOGGER.info("Processing time: {} ms for {} records, giving us an average of {} ms per item",
                 processTimeInMs,
                 records.size(),
                 processTimeInMs/records.size());
-        /* TODO: Fix logs */
-        LOGGER.info("{} tags were written to the stream.", tagCount);
-        LOGGER.info("{} deleted docs were written to the stream", deletedDocCount);
     }
 
 
@@ -224,8 +223,8 @@ public class EventBatchProcessor {
             updateRequestChunk.forEach(updateRequest -> bulkRequest.append(updateRequest));
 
             if (updateRequestCounter > 0) {
-                LOGGER.info("{}: Sending Bulk-Request for {} Document-Updates ...", name(), updateRequestCounter);
-                LOGGER.info(bulkRequest.toString());
+                // LOGGER.info("{}: Sending Bulk-Request for {} Document-Updates ...", name(), updateRequestCounter);
+                // LOGGER.info(bulkRequest.toString());
                 Response bulkResponse = elasticsearchRequestManager.performBulkRequest(restClient, bulkRequest.toString());
                 StatusLine statusLine = bulkResponse.getStatusLine();
                 if (statusLine.getStatusCode() < 400) {
