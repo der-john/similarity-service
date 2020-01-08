@@ -1,0 +1,159 @@
+stages:
+- build
+- deploy-test
+- deploy-int
+- deploy-prod
+
+variables:
+  APP_VERSION: "0.59.${CI_PIPELINE_IID}"
+  APP_NAME: similarity-service
+  GITLAB_REGISTRY_IMAGE: "${CI_REGISTRY_IMAGE}"
+
+build-java:
+  stage: build
+  image: docker:latest
+  tags:
+  - docker-internal
+  script:
+#  - echo "Build java image"
+  - docker login ${CI_REGISTRY} -u gitlab-ci-token -p ${CI_JOB_TOKEN}
+  - docker build --build-arg APP_VERSION=${APP_VERSION} -t ${GITLAB_REGISTRY_IMAGE}:${CI_JOB_ID} .
+  - |
+    set -e
+    set -x
+    if [ "$CI_BUILD_REF_NAME" != "master" ]; then
+      echo "Skipping deploy for non-master branch $CI_BUILD_REF_NAME"
+      exit 0
+    fi
+    for IMAGE_NAME in ${GITLAB_REGISTRY_IMAGE}
+    do
+      docker tag ${GITLAB_REGISTRY_IMAGE}:${CI_JOB_ID} ${IMAGE_NAME}:${APP_VERSION}
+      docker push ${IMAGE_NAME}:${APP_VERSION}
+      docker tag ${GITLAB_REGISTRY_IMAGE}:${CI_JOB_ID} ${IMAGE_NAME}:latest
+      docker push ${IMAGE_NAME}:latest
+      docker rmi ${IMAGE_NAME}:${APP_VERSION}
+      docker rmi ${IMAGE_NAME}:latest
+    done
+  - docker rmi ${GITLAB_REGISTRY_IMAGE}:${CI_JOB_ID}
+  except:
+  - tags
+
+deploy-test:
+  stage: deploy-test
+  image: devth/helm:v2.12.3
+  tags:
+    - docker
+  only:
+    - master
+  when: manual
+  variables:
+    GCLOUD_PROJECT: seach-reco-test
+    CLUSTER: search-reco-test
+    REGION: europe-west1
+    SERVICE_ACCOUNT_JSON: "$TEST_GKE_SERVICE_ACCOUNT_JSON"
+  script:
+    - cd chart
+    # authorize and connect with GKE cluster
+    - gcloud auth activate-service-account --key-file=<( echo "$SERVICE_ACCOUNT_JSON")
+    - gcloud config set project $GCLOUD_PROJECT
+    - gcloud container clusters list
+    - gcloud container clusters get-credentials $CLUSTER --region $REGION
+    # fetch application.yml
+    - cp env/test/application.yml application.yml
+    # generate Chart.yaml
+    - 'echo "apiVersion: v1" > Chart.yaml'
+    - 'echo "name: $APP_NAME" >> Chart.yaml'
+    - 'echo "version: $APP_VERSION" >> Chart.yaml'
+    - cat Chart.yaml
+    # update helm and deploy
+    - helm dependency update
+    - |
+      set -e
+      set -x
+      helm upgrade --install $APP_NAME \
+        --set images.tag=$APP_VERSION \
+        --set images.repository=$CI_REGISTRY_IMAGE \
+        --set images.pullPolicy=Always \
+        --set redis.cluster.enabled=false \
+        --set redis.usePassword=false \
+        .
+
+deploy-int:
+  stage: deploy-int
+  image: devth/helm:v2.12.3
+  tags:
+    - docker
+  only:
+    - master
+  when: manual
+  variables:
+    GCLOUD_PROJECT: search-reco-int
+    CLUSTER: standard-cluster-1
+    REGION: europe-west3-c
+    SERVICE_ACCOUNT_JSON: "$INT_GKE_SERVICE_ACCOUNT_JSON"
+  script:
+    - cd chart
+    # authorize and connect with GKE cluster
+    - gcloud auth activate-service-account --key-file=<( echo "$SERVICE_ACCOUNT_JSON")
+    - gcloud config set project $GCLOUD_PROJECT
+    - gcloud container clusters list
+    - gcloud container clusters get-credentials $CLUSTER --region $REGION
+    # fetch application.yml
+    - cp env/int/application.yml application.yml
+    # generate Chart.yaml
+    - 'echo "apiVersion: v1" > Chart.yaml'
+    - 'echo "name: $APP_NAME" >> Chart.yaml'
+    - 'echo "version: $APP_VERSION" >> Chart.yaml'
+    - cat Chart.yaml
+    # update helm and deploy
+    - helm dependency update
+    - |
+      set -e
+      set -x
+      helm upgrade --install $APP_NAME \
+        --set images.tag=$APP_VERSION \
+        --set images.repository=$CI_REGISTRY_IMAGE \
+        --set images.pullPolicy=Always \
+        --set redis.cluster.enabled=false \
+        --set redis.usePassword=false \
+        .
+
+deploy-prod:
+  stage: deploy-prod
+  image: devth/helm:v2.12.3
+  tags:
+    - docker
+  only:
+    - master
+  when: manual
+  variables:
+    GCLOUD_PROJECT: search-reco-prod
+    CLUSTER: search-reco-prod
+    REGION: europe-west3-c
+    SERVICE_ACCOUNT_JSON: "PROD_GKE_SERVICE_ACCOUNT_JSON"
+  script:
+    - cd chart
+    # authorize and connect with GKE cluster
+    - gcloud auth activate-service-account --key-file=<( echo "$SERVICE_ACCOUNT_JSON")
+    - gcloud config set project $GCLOUD_PROJECT
+    - gcloud container clusters list
+    - gcloud container clusters get-credentials $CLUSTER --region $REGION
+    # fetch application.yml
+    - cp env/prod/application.yml application.yml
+    # generate Chart.yaml
+    - 'echo "apiVersion: v1" > Chart.yaml'
+    - 'echo "name: $APP_NAME" >> Chart.yaml'
+    - 'echo "version: $APP_VERSION" >> Chart.yaml'
+    - cat Chart.yaml
+    # update helm and deploy
+    - helm dependency update
+    - |
+      set -e
+      set -x
+      helm upgrade --install $APP_NAME \
+        --set images.tag=$APP_VERSION \
+        --set images.repository=$CI_REGISTRY_IMAGE \
+        --set images.pullPolicy=Always \
+        --set redis.cluster.enabled=false \
+        --set redis.usePassword=false \
+        .

@@ -1,0 +1,40 @@
+# Diese Werte sind vorbelegt und können ggf. in der externen application.yml überschrieben werden
+# Webservice-Konfiguration
+server:
+  # Kontext-Pfad
+  context-path: /neo4j-kinesis
+logging.file: service.log
+
+# Projektinformationen (werden via Maven gesetzt)
+info:
+  build.artifact: "@project.artifactId@"
+  build.name: "@project.name@"
+  build.description: "@project.description@"
+  build.version: "@project.version@"
+
+kinesis:
+  # Timeout (in ms)
+  requestTimeout: 60000
+  # Controls how long records are allowed to wait in the KPL's buffers before being sent. Larger values increase aggregation and reduces the number of Kinesis records put.
+  recordMaxBufferedTime: 20000
+  # Für Testzwecke kann das Checkpointing zwischenzeitlich deaktiviert werden.
+  # Die Verarbeitung von Events wird dadurch nicht bestätigt, was wiederum dazu führt,
+  # dass die Events nach einem Neustart der Anwendung erneut verarbeitet werden.
+  doCheckpointing: true
+  # Startpunkt, ab dem Events aus dem Stream konsumiert werden sollen (ACHTUNG: nur relevant
+  #    für das initiale Aufsetzen. Die KCL speichert den Wert als Teil des Verarbeitungszustandes
+  #    in der zugehörigen DynamoDB-Tabelle.)
+  # Mögliche Optionen:
+  #  * "latest" (Default): nur neue Events, die nach dem Anwendungsstart in den Stream einfließen
+  #  * "all": alle Events, die im Stream vorgehalten werden
+  initialPosition: latest
+  # Maximalzahl an Items, die in den TagDataStream geschrieben werden
+  collectionMaxCount: 100
+
+elasticsearch:
+  docsIndex: docs
+  documentType: searchIndexDocument
+  scrollSize: 2048
+  openSearchContextTime: 2m
+  indicatorsFieldSuffix: Indicators
+  documentUpdateChunkSize: 4096

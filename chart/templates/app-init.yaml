@@ -1,0 +1,25 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  labels:
+    app: {{ template "fullname" . }}
+    chart: {{ template "chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+  name: {{ template "fullname" . }}-init
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-delete-policy": "hook-succeeded"
+spec:
+  containers:
+  - name: post-install-job
+    image: {{ .Values.images.repository }}:{{ .Values.images.tag }}
+    imagePullPolicy:  {{ .Values.images.pullPolicy }}
+    command: ["/bin/sh", "-c", "pwd"]
+    resources: {}
+    envFrom:
+    - configMapRef:
+        name: {{ template "name" . }}-php
+  imagePullSecrets:
+    - name: regcred
+  restartPolicy: Never

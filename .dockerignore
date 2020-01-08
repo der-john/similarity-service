@@ -1,0 +1,5 @@
+/.idea
+/.gitignore
+/application.yml
+/target
+/.log

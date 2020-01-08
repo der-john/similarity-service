@@ -1,0 +1,55 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: {{ template "fullname" . }}
+    chart: {{ template "chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+  name: {{ template "fullname" . }}-app
+spec:
+  replicas: 1
+  strategy: {}
+  selector:
+    matchLabels:
+      app: {{ template "fullname" . }}-app
+  template:
+    metadata:
+      labels:
+        app: {{ template "fullname" . }}-app
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/config.yaml") . | sha256sum }}
+        checksum/application-yml: {{ (.Files.Glob "application.yml").AsConfig | sha256sum }}
+    spec:
+      securityContext:
+        fsGroup: 1234
+      containers:
+        - name: java
+          image: {{ .Values.images.repository }}:{{ .Values.images.tag }}
+          imagePullPolicy:  {{ .Values.images.pullPolicy }}
+          ports:
+            - containerPort: 8081
+            - containerPort: 8093
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8093
+            periodSeconds: 1
+            timeoutSeconds: 1
+            successThreshold: 1
+            failureThreshold: 10
+          resources:
+            requests:
+              cpu: 1
+          volumeMounts:
+            - mountPath: /usr/src/app/config
+              name: config-volume
+      imagePullSecrets:
+        - name: similarity-service-regcred
+      volumes:
+        - name: config-volume
+          configMap:
+            name: {{ template "name" . }}-config
+            items:
+              - key: application.yml
+                path: application.yml

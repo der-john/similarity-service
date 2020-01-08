@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+	<modelVersion>4.0.0</modelVersion>
+
+	<artifactId>zdf-similarity-service</artifactId>
+	<version>0.61</version>
+	<packaging>jar</packaging>
+
+	<name>zdf-similarity-service</name>
+	<description></description>
+
+	<parent>
+		<groupId>de.zdf.service</groupId>
+		<artifactId>zdf-spring-boot-starter-service</artifactId>
+		<version>1.1.47</version>
+		<relativePath />
+	</parent>
+
+	<dependencies>
+    	<dependency>
+    		<groupId>de.zdf.service</groupId>
+    		<artifactId>zdf-commons</artifactId>
+    		<version>[2.23,2.24)</version>
+    	</dependency>
+		<!-- Amazon Kinesis Client Library -->
+		<dependency>
+			<groupId>com.amazonaws</groupId>
+			<artifactId>amazon-kinesis-client</artifactId>
+			<version>1.9.0</version>
+		</dependency>
+		<dependency>
+			<groupId>commons-io</groupId>
+			<artifactId>commons-io</artifactId>
+			<version>2.4</version>
+		</dependency>
+		<dependency>
+			<groupId>redis.clients</groupId>
+			<artifactId>jedis</artifactId>
+			<version>2.8.1</version>
+		</dependency>
+		<dependency>
+			<groupId>org.elasticsearch.client</groupId>
+			<artifactId>elasticsearch-rest-client</artifactId>
+			<version>6.3.2</version>
+		</dependency>
+		<dependency>
+			<groupId>org.elasticsearch.client</groupId>
+			<artifactId>elasticsearch-rest-client</artifactId>
+			<version>6.7.1</version>
+		</dependency>
+	</dependencies>
+</project>

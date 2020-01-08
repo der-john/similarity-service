@@ -1,0 +1,15 @@
+.idea/
+.docker/data
+.DS_Store
+.env
+.idea
+*.txt
+
+profiles.xml
+*.iml
+
+*.log
+service.log*
+logs/
+
+target

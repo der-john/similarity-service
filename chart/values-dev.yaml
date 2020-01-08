@@ -1,0 +1,4 @@
+images:
+  repository: registry.exozet.com/zdf/similarity-service
+  tag: latest
+  pullPolicy: Always

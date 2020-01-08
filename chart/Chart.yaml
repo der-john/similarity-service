@@ -1,0 +1,3 @@
+# just for development, will be overriden by gitlabci!
+name: similarity-service
+version: DEV

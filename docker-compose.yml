@@ -1,0 +1,13 @@
+version: "3.3"
+
+services:
+  java:
+    image: registry.exozet.com/zdf/similarity-service:latest
+    ports:
+      - "8081:8081"
+    volumes:
+      - "./application.yml:/usr/src/app/application.yml"
+  redis:
+    image: redis
+    ports:
+      - "6379:6379"
