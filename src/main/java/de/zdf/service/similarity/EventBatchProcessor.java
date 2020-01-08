@@ -35,6 +35,7 @@ public class EventBatchProcessor {
     private static final Logger LOGGER = LoggerFactory.getLogger(EventBatchProcessor.class);
     private static final ObjectMapper MAPPER = new ObjectMapper();
     private static final CharsetDecoder DECODER = Charset.forName("UTF-8").newDecoder();
+    private static final String ZOMBIE = "ZOMBIE";
 
     @Autowired
     private RedisConfig redisConfig;
@@ -55,24 +56,25 @@ public class EventBatchProcessor {
 
         try (JedisPool pool = new JedisPool(redisConfig.getHost(), redisConfig.getPort())) {
             try (Jedis jedis = pool.getResource()) {
-                List<String> updateRequestsForBatch = new ArrayList<>();
+                Set<String> updatedDocIdsInBatch = new HashSet<>();
+                String tagProvider = ZOMBIE;
                 for (Record record : records) {
                     try {
                         String dataString = DECODER.decode(record.getData()).toString();
                         ObjectNode kinesisJson = (ObjectNode) MAPPER.readTree(dataString);
 
                         String docId = kinesisJson.get("docId").textValue();
-                        String tagProvider = kinesisJson.get("tagProvider").textValue();
+                        tagProvider = kinesisJson.get("tagProvider").textValue();
 
                         HashMap<String, Double> tagMap = getTagMap(kinesisJson);
 
                         waitForRedis(jedis);
 
-                        List<String> updateRequests = calculateIndicators(jedis, docId, tagProvider, tagMap);
+                        List<String> docIdsToBeUpdated = calculateIndicators(jedis, docId, tagProvider, tagMap);
 
-                        updateRequestsForBatch.addAll(updateRequests);
+                        updatedDocIdsInBatch.addAll(docIdsToBeUpdated);
 
-                        LOGGER.info("Received {} update requests.", updateRequests.size());
+                        LOGGER.info("Received {} update requests.", docIdsToBeUpdated.size());
 
                     } catch (IOException e) {
                         LOGGER.error("IO Exception: ", e);
@@ -80,6 +82,13 @@ public class EventBatchProcessor {
                         LOGGER.error("Couldn't process the following record: " + record, e);
                     }
                 }
+
+                if (ZOMBIE.equals(tagProvider)) {
+                    LOGGER.warn("No tag provider in this batch! Nothing to update.");
+                    return;
+                }
+
+                List<String> updateRequestsForBatch = generateUpdateRequests(jedis, tagProvider, updatedDocIdsInBatch);
 
                 final RestClient restClient = elasticsearchRequestManager.getRestClient();
                 updateDocuments(restClient, updateRequestsForBatch);
@@ -162,10 +171,10 @@ public class EventBatchProcessor {
 
         // LOGGER.info("These are the docIdsToBeUpdated: " + docIdsToBeUpdated);
 
-        return generateUpdateRequests(jedis, tagProvider, docIdsToBeUpdated);
+        return docIdsToBeUpdated;
     }
 
-    private List<String> generateUpdateRequests(Jedis jedis, String tagProvider, List<String> docIdsToBeUpdated) {
+    private List<String> generateUpdateRequests(Jedis jedis, String tagProvider, Set<String> docIdsToBeUpdated) {
         List<String> updateRequests = new ArrayList<>();
         for (String id : docIdsToBeUpdated) {
             String key = getIndicatorsKey(tagProvider, id);
