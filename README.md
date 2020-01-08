@@ -1,5 +1,8 @@
 # similarity-service
 
+Calculates recommendations on the basis of tags created by CorpusTagProvider, TrioTagProvider etc.
+
+
 *Setup für PROD/INT*:
 
 - Repo klonen
@@ -20,3 +23,4 @@
 - `mvn clean spring-boot:run`
 - If you have used a new consumer group, please delete the table on https://eu-central-1.console.aws.amazon.com/dynamodb/home?region=eu-central-1#tables: . 
     Otherwise, there will be maintenance costs!
+
