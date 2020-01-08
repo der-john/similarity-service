@@ -119,12 +119,13 @@ public class EventBatchProcessor {
             jedis.hdel(affectedIndicatorsKey, docIdToBeDeleted);
             docIdsToBeUpdated.add(affectedDocId);
         }
+        docIdsToBeUpdated.add(docIdToBeDeleted);
         return docIdsToBeUpdated;
     }
 
     private String checkActionAndGetId (JsonNode jsonObject) {
-        String action = jsonObject.get("action").textValue();
-        if (StringUtils.equals(action, "delete")) {
+        Object action = jsonObject.get("action");
+        if (action != null && StringUtils.equals(action.toString(), "delete")) {
             String docId = jsonObject.get("_id").textValue();
             if (StringUtils.isNotBlank(docId)) {
                 return docId;
