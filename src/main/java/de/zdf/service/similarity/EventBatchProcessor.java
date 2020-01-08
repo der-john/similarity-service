@@ -119,6 +119,7 @@ public class EventBatchProcessor {
             jedis.hdel(affectedIndicatorsKey, docIdToBeDeleted);
             docIdsToBeUpdated.add(affectedDocId);
         }
+        jedis.hdel(indicatorsKey);
         docIdsToBeUpdated.add(docIdToBeDeleted);
         return docIdsToBeUpdated;
     }
