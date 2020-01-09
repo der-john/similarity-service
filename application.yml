@@ -55,3 +55,6 @@ elasticsearch:
   isBearer: false
   authField: "Authorization"
   authToken: "Basic c25yOkhpZTlzaWV2"
+
+similarity:
+  tagProviders: corpus,googleLanguage

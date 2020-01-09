@@ -13,6 +13,7 @@ import org.apache.http.StatusLine;
 import org.elasticsearch.client.Response;
 import org.elasticsearch.client.RestClient;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import com.amazonaws.services.kinesis.model.Record;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -47,6 +48,12 @@ public class EventBatchProcessor {
     @Autowired
     private ObjectMapper mapper;
 
+    @Value("${similarity.tagProviders}")
+    private String tagProvidersString;
+
+    private String[] getTagProviders() {
+        return tagProvidersString.trim().split(",");
+    }
 
     public String name() {
         return "SimilarityService";
@@ -57,19 +64,28 @@ public class EventBatchProcessor {
 
         try (JedisPool pool = new JedisPool(redisConfig.getHost(), redisConfig.getPort())) {
             try (Jedis jedis = pool.getResource()) {
+
                 Set<String> updatedDocIdsInBatch = new HashSet<>();
                 String tagProvider = ZOMBIE;
+
                 for (Record record : records) {
                     try {
                         String dataString = DECODER.decode(record.getData()).toString();
                         ObjectNode kinesisJson = (ObjectNode) MAPPER.readTree(dataString);
 
                         String docIdToBeDeleted = checkActionAndGetId(kinesisJson);
-                        if (docIdToBeDeleted != null) {
-                            List<String> docIdsToBeUpdated = removeIndicators(jedis, docIdToBeDeleted, tagProvider);
-                            updatedDocIdsInBatch.addAll(docIdsToBeUpdated);
 
-                            LOGGER.info("Received {} update requests due to deletion of {}.", docIdsToBeUpdated.size(), docIdToBeDeleted);
+                        if (docIdToBeDeleted != null) {
+
+                            List<String> updateRequestsForBatch = new ArrayList<>();
+                            for (String provider : getTagProviders()) {
+                                List<String> docIdsToBeUpdated = removeIndicators(jedis, docIdToBeDeleted, provider);
+                                updateRequestsForBatch.addAll(generateUpdateRequests(jedis, provider, docIdsToBeUpdated));
+                            }
+                            final RestClient restClient = elasticsearchRequestManager.getRestClient();
+                            updateDocuments(restClient, updateRequestsForBatch);
+
+                            LOGGER.info("Received {} update requests due to deletion of {}.", updateRequestsForBatch.size(), docIdToBeDeleted);
                             continue;
                         }
 
@@ -96,12 +112,6 @@ public class EventBatchProcessor {
                         LOGGER.error("Couldn't process the following record: " + record, e);
                     }
                 }
-
-                if (ZOMBIE.equals(tagProvider)) {
-                    LOGGER.warn("No tag provider in this batch! Nothing to update.");
-                    return;
-                }
-
                 List<String> updateRequestsForBatch = generateUpdateRequests(jedis, tagProvider, updatedDocIdsInBatch);
 
                 final RestClient restClient = elasticsearchRequestManager.getRestClient();
@@ -120,13 +130,21 @@ public class EventBatchProcessor {
         List<String> docIdsToBeUpdated = new ArrayList<>();
         String indicatorsKey = getIndicatorsKey(tagProvider, docIdToBeDeleted);
         Map<String, String> indicatorsMap = jedis.hgetAll(indicatorsKey);
+
+        // Due to changes in tag provider setup, this exact indicator map may not exist
+        if (null == indicatorsMap) {
+            return null;
+        }
+
         for (String affectedDocId : indicatorsMap.keySet()) {
             String affectedIndicatorsKey = getIndicatorsKey(tagProvider, affectedDocId);
             jedis.hdel(affectedIndicatorsKey, docIdToBeDeleted);
             docIdsToBeUpdated.add(affectedDocId);
         }
-        jedis.hdel(indicatorsKey);
+
+        jedis.del(indicatorsKey);
         docIdsToBeUpdated.add(docIdToBeDeleted);
+
         return docIdsToBeUpdated;
     }
 
@@ -251,6 +269,10 @@ public class EventBatchProcessor {
         }
 
         return updateRequests;
+    }
+
+    private List<String> generateUpdateRequests(Jedis jedis, String tagProvider, List<String> docIdsToBeUpdated) {
+        return generateUpdateRequests(jedis, tagProvider, docIdsToBeUpdated);
     }
 
     private String buildIndicatorsField(Map<String, String> indicators, String tagProvider) {

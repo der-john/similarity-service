@@ -51,3 +51,6 @@ elasticsearch:
   # authToken: "Basic YXdzX2Vsc2FjOmFpbWllRjdSCg"
   username: aws_elsac
   password: aimieF7R
+
+similarity:
+  tag-providers: corpus, googleLanguage
