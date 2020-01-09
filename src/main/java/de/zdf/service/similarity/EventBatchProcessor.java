@@ -290,6 +290,10 @@ public class EventBatchProcessor {
                 // LOGGER.info("{}: Sending Bulk-Request for {} Document-Updates ...", name(), updateRequestCounter);
                 // LOGGER.info(bulkRequest.toString());
                 Response bulkResponse = elasticsearchRequestManager.performBulkRequest(restClient, bulkRequest.toString());
+                if (null == bulkResponse || null == bulkResponse.getStatusLine()) {
+                    LOGGER.warn("ES bulk request failed and didn't even throw a response.");
+                    return;
+                }
                 StatusLine statusLine = bulkResponse.getStatusLine();
                 if (statusLine.getStatusCode() < 400) {
                     LOGGER.info(statusLine.toString());
