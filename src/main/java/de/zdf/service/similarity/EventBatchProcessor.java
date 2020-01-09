@@ -165,17 +165,8 @@ public class EventBatchProcessor {
             Map<String, String> termStringMap = jedis.hgetAll(termKey);
             if (MapUtils.isNotEmpty(termStringMap)) {
 
-                String previousWeightString = termStringMap.get(docId);
-                Double previousWeight = 0d;
-                if (previousWeightString != null) {
-                    previousWeight = Double.parseDouble(previousWeightString);
-                    if (isMoreOrLessEqual(previousWeight, tagWeight)) {
-                        continue;
-                    } else {
-                        previousWeight = Double.parseDouble(previousWeightString);
-                    }
-                }
-                Double weightDiff = tagWeight - previousWeight;
+                Double weightDiff = getTagWeightDiff(docId, tagWeight, termStringMap);
+                if (weightDiff == null) continue;
 
                 for (String similarDocId : termStringMap.keySet()) {
                     if (similarDocId.equals(docId)) {
@@ -208,6 +199,20 @@ public class EventBatchProcessor {
         // LOGGER.info("These are the docIdsToBeUpdated: " + docIdsToBeUpdated);
 
         return docIdsToBeUpdated;
+    }
+
+    private Double getTagWeightDiff(String docId, Double tagWeight, Map<String, String> termStringMap) {
+        String previousWeightString = termStringMap.get(docId);
+        Double previousWeight = 0d;
+        if (previousWeightString != null) {
+            previousWeight = Double.parseDouble(previousWeightString);
+            if (isMoreOrLessEqual(previousWeight, tagWeight)) {
+                return null;
+            } else {
+                previousWeight = Double.parseDouble(previousWeightString);
+            }
+        }
+        return tagWeight - previousWeight;
     }
 
     private static final boolean isMoreOrLessEqual(Double previousWeight, Double tagWeight) {
