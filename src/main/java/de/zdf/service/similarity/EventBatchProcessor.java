@@ -132,7 +132,7 @@ public class EventBatchProcessor {
 
     private String checkActionAndGetId (JsonNode jsonObject) {
         Object action = jsonObject.get("action");
-        if (action != null && StringUtils.equals(action.toString(), "delete")) {
+        if (action != null && StringUtils.equals(jsonObject.get("action").textValue(), "delete")) {
             String docId = jsonObject.get("_id").textValue();
             if (StringUtils.isNotBlank(docId)) {
                 return docId;
