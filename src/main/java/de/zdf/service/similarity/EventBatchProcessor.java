@@ -167,7 +167,7 @@ public class EventBatchProcessor {
             Map<String, String> termStringMap = jedis.hgetAll(termKey);
             if (MapUtils.isNotEmpty(termStringMap)) {
 
-                Double weightDiff = getTagWeightDiff(docId, tagWeight, termStringMap);
+                Double weightDiff = getTagWeightDiff(tagWeight, termStringMap.get(docId));
                 if (weightDiff == null) continue;
 
                 for (String similarDocId : termStringMap.keySet()) {
@@ -203,8 +203,7 @@ public class EventBatchProcessor {
         return docIdsToBeUpdated;
     }
 
-    private Double getTagWeightDiff(String docId, Double tagWeight, Map<String, String> termStringMap) {
-        String previousWeightString = termStringMap.get(docId);
+    private static final Double getTagWeightDiff(Double tagWeight, String previousWeightString) {
         Double previousWeight = 0d;
         if (previousWeightString != null) {
             previousWeight = Double.parseDouble(previousWeightString);
