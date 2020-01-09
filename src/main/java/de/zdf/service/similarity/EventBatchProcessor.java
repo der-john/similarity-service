@@ -7,6 +7,8 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import de.zdf.service.similarity.config.ElasticsearchConfig;
 import de.zdf.service.similarity.config.RedisConfig;
 import de.zdf.service.similarity.elasticsearch.ElasticsearchRequestManager;
+import org.apache.commons.collections.CollectionUtils;
+import org.apache.commons.collections.ListUtils;
 import org.apache.commons.collections.MapUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.http.StatusLine;
@@ -126,8 +128,14 @@ public class EventBatchProcessor {
     private void handleDeletion(Jedis jedis, String docIdToBeDeleted) {
         List<String> updateRequestsForBatch = new ArrayList<>();
         for (String provider : getTagProviders()) {
+
             List<String> docIdsToBeUpdated = removeIndicators(jedis, docIdToBeDeleted, provider);
-            updateRequestsForBatch.addAll(generateUpdateRequests(jedis, provider, docIdsToBeUpdated));
+
+            List<String> updateRequests = generateUpdateRequests(jedis, provider, docIdsToBeUpdated);
+            if (CollectionUtils.isEmpty(updateRequests)) {
+                continue;
+            }
+            updateRequestsForBatch.addAll(updateRequests);
         }
         final RestClient restClient = elasticsearchRequestManager.getRestClient();
         updateDocuments(restClient, updateRequestsForBatch);
@@ -263,17 +271,18 @@ public class EventBatchProcessor {
         for (String id : docIdsToBeUpdated) {
             String key = getIndicatorsKey(tagProvider, id);
             Map<String, String> indicators = jedis.hgetAll(key);
+            if (indicators.size() == 0) {
+                return null;
+            }
             String indicatorFields = buildIndicatorsField(indicators, tagProvider);
-            if (!indicatorFields.isEmpty()) {
-                String indicatorFieldsAsJsonString = String.format(
-                        elasticsearchRequestManager.getIndicatorsUpdateRequestTemplate(),
-                        indicatorFields);
-                if (indicatorFieldsAsJsonString != null) {
-                    String updateRequest = elasticsearchRequestManager.buildIndicatorsUpdateRequest(id, indicatorFieldsAsJsonString);
-                    updateRequests.add(updateRequest);
+            String indicatorFieldsAsJsonString = String.format(
+                    elasticsearchRequestManager.getIndicatorsUpdateRequestTemplate(),
+                    indicatorFields);
+            if (indicatorFieldsAsJsonString != null) {
+                String updateRequest = elasticsearchRequestManager.buildIndicatorsUpdateRequest(id, indicatorFieldsAsJsonString);
+                updateRequests.add(updateRequest);
 
-                    // LOGGER.info("This is an update request: " + updateRequest);
-                }
+                // LOGGER.info("This is an update request: " + updateRequest);
             }
         }
 
@@ -288,13 +297,14 @@ public class EventBatchProcessor {
     private String buildIndicatorsField(Map<String, String> indicatorStringMap, String tagProvider) {
         ObjectNode indicatorsField = mapper.createObjectNode();
         try {
-            ArrayNode indicatorsArray = mapper.createArrayNode();
 
             Map<String, Double> indicators = new HashMap<>();
             for (Map.Entry<String, String> indicatorStringPair : indicatorStringMap.entrySet()) {
                 indicators.put(indicatorStringPair.getKey(), Double.parseDouble(indicatorStringPair.getValue()));
             }
             Map<String, Double> sortedIndicators = sortByValueAndCap(indicators);
+
+            ArrayNode indicatorsArray = mapper.createArrayNode();
 
             for (String docId : sortedIndicators.keySet()) {
                 ObjectNode indicator = mapper.createObjectNode();
@@ -306,7 +316,7 @@ public class EventBatchProcessor {
             indicatorsField.set(tagProviderKey, indicatorsArray);
 
         } catch (Exception e) {
-            LOGGER.error("JSON exception while initializing json.");
+            LOGGER.error("JSON exception while building indicators field json.");
         }
         try {
             return mapper.writeValueAsString(indicatorsField);
@@ -353,7 +363,9 @@ public class EventBatchProcessor {
             }
             offset += chunkSize;
         }
-        LOGGER.info("{}: {} of {} Documents updated succesfully.", name(), totalUpdateCount, documentCount);
+        if (documentCount > 0) {
+            LOGGER.info("{}: {} of {} Documents updated succesfully.", name(), totalUpdateCount, documentCount);
+        }
     }
 
     // cf https://stackoverflow.com/questions/109383/sort-a-mapkey-value-by-values
