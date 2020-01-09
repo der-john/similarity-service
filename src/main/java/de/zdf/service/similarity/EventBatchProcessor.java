@@ -71,6 +71,10 @@ public class EventBatchProcessor {
                             continue;
                         }
 
+                        if (null == kinesisJson.get("docId") || null == kinesisJson.get("tagProvider")) {
+                            continue;
+                        }
+
                         String docId = kinesisJson.get("docId").textValue();
                         tagProvider = kinesisJson.get("tagProvider").textValue();
 

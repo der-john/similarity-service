@@ -69,6 +69,7 @@ public class ElasticsearchRequestManager {
 							elasticsearchConfig.getProxyScheme()));
 				}
 			});
+
 		} else if (null != elasticsearchConfig.getUsername()) {
 			final CredentialsProvider credentialsProvider =
 					new BasicCredentialsProvider();
