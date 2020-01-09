@@ -26,7 +26,6 @@ import java.util.*;
 
 import java.nio.charset.Charset;
 import java.nio.charset.CharsetDecoder;
-import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
@@ -48,8 +47,14 @@ public class EventBatchProcessor {
     @Autowired
     private ObjectMapper mapper;
 
-    @Value("${similarity.tagProviders}")
+    @Value("${similarity.tagProviders:corpus}")
     private String tagProvidersString;
+
+    @Value("${similarity.minWeightDiff:0.0001}")
+    private Double minWeightDiff;
+
+    @Value("${similarity.maxIndicators:25}")
+    private Integer maxIndicators;
 
     private String[] getTagProviders() {
         return tagProvidersString.trim().split(",");
@@ -112,7 +117,7 @@ public class EventBatchProcessor {
         }
         long bulkEndTime = System.nanoTime();
         final double processTimeInMs = (bulkEndTime - bulkStartTime) / (1000 * 1000.);
-        LOGGER.info("Processing time: {} ms for {} records, giving us an average of {} ms per item",
+        LOGGER.info("Processing time: {} ms for {} docs, giving us an average of {} ms per doc",
                 processTimeInMs,
                 records.size(),
                 processTimeInMs/records.size());
@@ -225,7 +230,7 @@ public class EventBatchProcessor {
         return docIdsToBeUpdated;
     }
 
-    private static final Double getTagWeightDiff(Double tagWeight, String previousWeightString) {
+    private Double getTagWeightDiff(Double tagWeight, String previousWeightString) {
         Double previousWeight = 0d;
         if (previousWeightString != null) {
             previousWeight = Double.parseDouble(previousWeightString);
@@ -238,7 +243,7 @@ public class EventBatchProcessor {
         return tagWeight - previousWeight;
     }
 
-    private static final boolean isMoreOrLessEqual(Double previousWeight, Double tagWeight) {
+    private boolean isMoreOrLessEqual(Double previousWeight, Double tagWeight) {
         if (tagWeight.equals(previousWeight)) {
             return true;
         }
@@ -247,7 +252,7 @@ public class EventBatchProcessor {
             return true;
         }
 
-        if (tagWeight - previousWeight < 0.01 || previousWeight - tagWeight < 0.01) {
+        if (tagWeight - previousWeight < minWeightDiff || previousWeight - tagWeight < minWeightDiff) {
             return true;
         }
         return false;
@@ -280,15 +285,21 @@ public class EventBatchProcessor {
         return generateUpdateRequests(jedis, tagProvider, setOfDocsToBeUpdated);
     }
 
-    private String buildIndicatorsField(Map<String, String> indicators, String tagProvider) {
+    private String buildIndicatorsField(Map<String, String> indicatorStringMap, String tagProvider) {
         ObjectNode indicatorsField = mapper.createObjectNode();
         try {
             ArrayNode indicatorsArray = mapper.createArrayNode();
-            for (String docId : indicators.keySet()) {
-                Double rating = Double.parseDouble(indicators.get(docId));
+
+            Map<String, Double> indicators = new HashMap<>();
+            for (Map.Entry<String, String> indicatorStringPair : indicatorStringMap.entrySet()) {
+                indicators.put(indicatorStringPair.getKey(), Double.parseDouble(indicatorStringPair.getValue()));
+            }
+            Map<String, Double> sortedIndicators = sortByValueAndCap(indicators);
+
+            for (String docId : sortedIndicators.keySet()) {
                 ObjectNode indicator = mapper.createObjectNode();
                 indicator.put("id", docId);
-                indicator.put("rating", rating);
+                indicator.put("rating", indicators.get(docId));
                 indicatorsArray.add(indicator);
             }
             String tagProviderKey = tagProvider + elasticsearchConfig.getIndicatorsFieldSuffix();
@@ -343,6 +354,19 @@ public class EventBatchProcessor {
             offset += chunkSize;
         }
         LOGGER.info("{}: {} of {} Documents updated succesfully.", name(), totalUpdateCount, documentCount);
+    }
+
+    // cf https://stackoverflow.com/questions/109383/sort-a-mapkey-value-by-values
+    private Map<String, Double> sortByValueAndCap(Map<String, Double> map) {
+        List<Map.Entry<String, Double>> list = new ArrayList<>(map.entrySet());
+        list.sort(Map.Entry.comparingByValue());
+
+        Map<String, Double> result = new LinkedHashMap<>();
+        for (Map.Entry<String, Double> entry : list.subList(0, maxIndicators)) {
+            result.put(entry.getKey(), entry.getValue());
+        }
+
+        return result;
     }
 
     private static final HashMap<String, Double> getTagMap(ObjectNode kinesisJson) {

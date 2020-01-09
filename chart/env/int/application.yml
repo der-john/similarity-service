@@ -53,4 +53,6 @@ elasticsearch:
   password: aimieF7R
 
 similarity:
-  tag-providers: corpus, googleLanguage
+  tagProviders: corpus,googleLanguage
+  minWeightDiff: 0.0001
+  maxIndicators: 25
