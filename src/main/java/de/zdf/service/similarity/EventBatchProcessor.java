@@ -77,15 +77,7 @@ public class EventBatchProcessor {
 
                         if (docIdToBeDeleted != null) {
 
-                            List<String> updateRequestsForBatch = new ArrayList<>();
-                            for (String provider : getTagProviders()) {
-                                List<String> docIdsToBeUpdated = removeIndicators(jedis, docIdToBeDeleted, provider);
-                                updateRequestsForBatch.addAll(generateUpdateRequests(jedis, provider, docIdsToBeUpdated));
-                            }
-                            final RestClient restClient = elasticsearchRequestManager.getRestClient();
-                            updateDocuments(restClient, updateRequestsForBatch);
-
-                            LOGGER.info("Received {} update requests due to deletion of {}.", updateRequestsForBatch.size(), docIdToBeDeleted);
+                            handleDeletion(jedis, docIdToBeDeleted);
                             continue;
                         }
 
@@ -124,6 +116,18 @@ public class EventBatchProcessor {
                 processTimeInMs,
                 records.size(),
                 processTimeInMs/records.size());
+    }
+
+    private void handleDeletion(Jedis jedis, String docIdToBeDeleted) {
+        List<String> updateRequestsForBatch = new ArrayList<>();
+        for (String provider : getTagProviders()) {
+            List<String> docIdsToBeUpdated = removeIndicators(jedis, docIdToBeDeleted, provider);
+            updateRequestsForBatch.addAll(generateUpdateRequests(jedis, provider, docIdsToBeUpdated));
+        }
+        final RestClient restClient = elasticsearchRequestManager.getRestClient();
+        updateDocuments(restClient, updateRequestsForBatch);
+
+        LOGGER.info("Received {} update requests due to deletion of {}.", updateRequestsForBatch.size(), docIdToBeDeleted);
     }
 
     private List<String> removeIndicators(Jedis jedis, String docIdToBeDeleted, String tagProvider) {
