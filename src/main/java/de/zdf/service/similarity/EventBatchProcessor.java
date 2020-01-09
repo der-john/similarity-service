@@ -68,6 +68,8 @@ public class EventBatchProcessor {
                         if (docIdToBeDeleted != null) {
                             List<String> docIdsToBeUpdated = removeIndicators(jedis, docIdToBeDeleted, tagProvider);
                             updatedDocIdsInBatch.addAll(docIdsToBeUpdated);
+
+                            LOGGER.info("Received {} update requests due to deletion of {}.", docIdsToBeUpdated.size(), docIdToBeDeleted);
                             continue;
                         }
 
@@ -86,7 +88,7 @@ public class EventBatchProcessor {
 
                         updatedDocIdsInBatch.addAll(docIdsToBeUpdated);
 
-                        LOGGER.info("Received {} update requests.", docIdsToBeUpdated.size());
+                        LOGGER.info("Received {} update requests due to update/creation of {}.", docIdsToBeUpdated.size(), docId);
 
                     } catch (IOException e) {
                         LOGGER.error("IO Exception: ", e);
