@@ -276,7 +276,8 @@ public class EventBatchProcessor {
     }
 
     private List<String> generateUpdateRequests(Jedis jedis, String tagProvider, List<String> docIdsToBeUpdated) {
-        return generateUpdateRequests(jedis, tagProvider, docIdsToBeUpdated);
+        Set<String> setOfDocsToBeUpdated = docIdsToBeUpdated.stream().collect(Collectors.toSet());
+        return generateUpdateRequests(jedis, tagProvider, setOfDocsToBeUpdated);
     }
 
     private String buildIndicatorsField(Map<String, String> indicators, String tagProvider) {
