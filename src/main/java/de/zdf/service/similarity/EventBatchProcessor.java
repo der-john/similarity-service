@@ -8,7 +8,6 @@ import de.zdf.service.similarity.config.ElasticsearchConfig;
 import de.zdf.service.similarity.config.RedisConfig;
 import de.zdf.service.similarity.elasticsearch.ElasticsearchRequestManager;
 import org.apache.commons.collections.CollectionUtils;
-import org.apache.commons.collections.ListUtils;
 import org.apache.commons.collections.MapUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.http.StatusLine;
@@ -170,14 +169,12 @@ public class EventBatchProcessor {
         Map<String, String> indicatorsMap = jedis.hgetAll(indicatorsKey);
 
         // Due to changes in tag provider setup, this exact indicator map may not exist
-        if (null == indicatorsMap) {
-            return null;
-        }
-
-        for (String affectedDocId : indicatorsMap.keySet()) {
-            String affectedIndicatorsKey = getIndicatorsKey(tagProvider, affectedDocId);
-            jedis.hdel(affectedIndicatorsKey, docIdToBeDeleted);
-            docIdsToBeUpdated.add(affectedDocId);
+        if (null != indicatorsMap) {
+            for (String affectedDocId : indicatorsMap.keySet()) {
+                String affectedIndicatorsKey = getIndicatorsKey(tagProvider, affectedDocId);
+                jedis.hdel(affectedIndicatorsKey, docIdToBeDeleted);
+                docIdsToBeUpdated.add(affectedDocId);
+            }
         }
 
         jedis.del(indicatorsKey);
@@ -292,10 +289,13 @@ public class EventBatchProcessor {
         for (String id : docIdsToBeUpdated) {
             String key = getIndicatorsKey(tagProvider, id);
             Map<String, String> indicators = jedis.hgetAll(key);
+
+            String indicatorFields;
             if (indicators.size() == 0) {
-                return null;
+                indicatorFields = "[]";
+            } else {
+                indicatorFields = buildIndicatorFields(indicators, tagProvider);
             }
-            String indicatorFields = buildIndicatorsField(indicators, tagProvider);
             String indicatorFieldsAsJsonString = String.format(
                     elasticsearchRequestManager.getIndicatorsUpdateRequestTemplate(),
                     indicatorFields);
@@ -315,8 +315,8 @@ public class EventBatchProcessor {
         return generateUpdateRequests(jedis, tagProvider, setOfDocsToBeUpdated);
     }
 
-    private String buildIndicatorsField(Map<String, String> indicatorStringMap, String tagProvider) {
-        ObjectNode indicatorsField = mapper.createObjectNode();
+    private String buildIndicatorFields(Map<String, String> indicatorStringMap, String tagProvider) {
+        ObjectNode indicatorFields = mapper.createObjectNode();
         try {
 
             Map<String, Double> indicators = new HashMap<>();
@@ -334,15 +334,15 @@ public class EventBatchProcessor {
                 indicatorsArray.add(indicator);
             }
             String tagProviderKey = tagProvider + elasticsearchConfig.getIndicatorsFieldSuffix();
-            indicatorsField.set(tagProviderKey, indicatorsArray);
+            indicatorFields.set(tagProviderKey, indicatorsArray);
 
         } catch (Exception e) {
             LOGGER.error("JSON exception while building indicators field json.");
         }
         try {
-            return mapper.writeValueAsString(indicatorsField);
+            return mapper.writeValueAsString(indicatorFields);
         } catch (JsonProcessingException e) {
-            LOGGER.error("JSON exception while processing " + indicatorsField);
+            LOGGER.error("JSON exception while processing " + indicatorFields);
             return null;
         }
     }
