@@ -74,6 +74,7 @@ public class EventBatchProcessor {
 
                 Set<String> updatedDocIdsInBatch = new HashSet<>();
                 String tagProvider = ZOMBIE;
+                int i = 1;
 
                 for (Record record : records) {
                     try {
@@ -103,7 +104,9 @@ public class EventBatchProcessor {
 
                         updatedDocIdsInBatch.addAll(docIdsToBeUpdated);
 
-                        LOGGER.info("Received {} update requests due to update/creation of {}.", docIdsToBeUpdated.size(), docId);
+                        LOGGER.info("Received {} update requests due to update/creation of {} ({}/{}).",
+                                docIdsToBeUpdated.size(), docId, i, records.size());
+                        i++;
 
                     } catch (IOException e) {
                         LOGGER.error("IO Exception: ", e);

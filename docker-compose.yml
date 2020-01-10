@@ -1,5 +1,8 @@
 version: "3.3"
 
+volumes:
+  similarity-service-redis-DEV:
+
 services:
   java:
     image: registry.exozet.com/zdf/similarity-service:latest
@@ -11,3 +14,5 @@ services:
     image: redis
     ports:
       - "6379:6379"
+    volumes:
+      - similarity-service-redis-DEV:/data

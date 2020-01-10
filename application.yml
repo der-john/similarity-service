@@ -37,8 +37,11 @@ kinesis:
   tagStreamName: tag-data-stream-gzs4
   # Name der Stream Consumer Group
   # (Alle Instanzen einer Consumer Group werden automatisch über die Shards eines Streams geloadbalanced)
-  tagStreamConsumerGroup: johns-similarity-service-DEV
+  tagStreamConsumerGroup: DEV-tag-stream-consumer-group # INT
 
+###################################################
+# Konfiguration fuer Redis
+###################################################
 redis:
   host: localhost
   port: 6379

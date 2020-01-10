@@ -36,7 +36,7 @@ public class ElasticsearchConfig {
 	@NotNull
 	private String indicatorsFieldSuffix;
 	@NotNull
-	private int documentUpdateChunkSize;
+	private int documentUpdateChunkSize = 4096;
 
 	private String searchEndpoint;
 	private String initialScrollEndpoint;
