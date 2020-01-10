@@ -284,7 +284,7 @@ public class EventBatchProcessor {
         return false;
     }
 
-    private List<String> generateUpdateRequests(Jedis jedis, String tagProvider, Set<String> docIdsToBeUpdated) {
+    private List<String> generateUpdateRequests(Jedis jedis, String tagProvider, List<String> docIdsToBeUpdated) {
         List<String> updateRequests = new ArrayList<>();
         for (String id : docIdsToBeUpdated) {
             String key = getIndicatorsKey(tagProvider, id);
@@ -310,11 +310,6 @@ public class EventBatchProcessor {
         return updateRequests;
     }
 
-    private List<String> generateUpdateRequests(Jedis jedis, String tagProvider, List<String> docIdsToBeUpdated) {
-        Set<String> setOfDocsToBeUpdated = docIdsToBeUpdated.stream().collect(Collectors.toSet());
-        return generateUpdateRequests(jedis, tagProvider, setOfDocsToBeUpdated);
-    }
-
     private String buildIndicatorFields(Map<String, String> indicatorStringMap, String tagProvider) {
         ObjectNode indicatorFields = mapper.createObjectNode();
         try {
@@ -337,7 +332,7 @@ public class EventBatchProcessor {
             indicatorFields.set(tagProviderKey, indicatorsArray);
 
         } catch (Exception e) {
-            LOGGER.error("JSON exception while building indicators field json.");
+            LOGGER.error("JSON exception while building indicators field json:" + e);
         }
         try {
             return mapper.writeValueAsString(indicatorFields);
@@ -395,7 +390,8 @@ public class EventBatchProcessor {
         list.sort(Map.Entry.comparingByValue());
 
         Map<String, Double> result = new LinkedHashMap<>();
-        for (Map.Entry<String, Double> entry : list.subList(0, maxIndicators)) {
+        int upperBound = Math.min(maxIndicators, list.size());
+        for (Map.Entry<String, Double> entry : list.subList(0, upperBound)) {
             result.put(entry.getKey(), entry.getValue());
         }
 
