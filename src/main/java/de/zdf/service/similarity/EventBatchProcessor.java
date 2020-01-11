@@ -211,6 +211,7 @@ public class EventBatchProcessor {
         List<String> docIdsToBeUpdated = new ArrayList<>();
 
         String indicatorsKey = getIndicatorsKey(tagProvider, docId);
+        boolean hasAnyTagChanged = false;
 
         for (String tagName : tagMap.keySet()) {
 
@@ -228,6 +229,7 @@ public class EventBatchProcessor {
                         continue;
                     }
 
+                    hasAnyTagChanged = true;
                     docIdsToBeUpdated.add(similarDocId);
 
                     Double similarDocWeight = Double.parseDouble(termStringMap.get(similarDocId));
@@ -247,7 +249,9 @@ public class EventBatchProcessor {
 
             // LOGGER.info("This is the termMap called {}: {}", termKey, jedis.hgetAll(termKey));
         }
-        docIdsToBeUpdated.add(docId);
+        if (hasAnyTagChanged) {
+            docIdsToBeUpdated.add(docId);
+        }
 
         // LOGGER.info("This is the indicatorsMap called {}: {}", indicatorsKey, jedis.hgetAll(indicatorsKey));
 
