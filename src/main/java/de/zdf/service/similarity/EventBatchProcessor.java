@@ -292,7 +292,8 @@ public class EventBatchProcessor {
 
             String indicatorFields;
             if (indicators.size() == 0) {
-                indicatorFields = "[]";
+                String tagProviderKey = tagProvider + elasticsearchConfig.getIndicatorsFieldSuffix();
+                indicatorFields = String.format("{ \"%s\": [] }", tagProviderKey);
             } else {
                 indicatorFields = buildIndicatorFields(indicators, tagProvider);
             }
