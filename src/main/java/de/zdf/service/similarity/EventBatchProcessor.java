@@ -251,12 +251,13 @@ public class EventBatchProcessor {
                 Double weightDiff = getTagWeightDiff(tagWeight, termStringMap.get(docId));
                 if (weightDiff == null) continue;
 
-                for (String similarDocId : termMap.values()) {
+                for (Map.Entry<Double, String> entry : termMap.entrySet()) {
+                    String similarDocId = entry.getValue();
                     if (similarDocId.equals(docId)) {
                         continue;
                     }
 
-                    Double similarDocWeight = Double.parseDouble(termStringMap.get(similarDocId));
+                    Double similarDocWeight = entry.getKey();
 
                     // cleanup legacy zero-score entries
                     if (similarDocWeight == 0d) {
