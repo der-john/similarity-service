@@ -1,7 +1,9 @@
 package de.zdf.service.similarity;
 
+import com.amazonaws.services.kinesis.model.Record;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import de.zdf.service.similarity.config.ElasticsearchConfig;
@@ -10,27 +12,22 @@ import de.zdf.service.similarity.elasticsearch.ElasticsearchRequestManager;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.collections.MapUtils;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.lang3.tuple.Pair;
 import org.apache.http.StatusLine;
 import org.elasticsearch.client.Response;
 import org.elasticsearch.client.RestClient;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
-import com.amazonaws.services.kinesis.model.Record;
-import com.fasterxml.jackson.databind.ObjectMapper;
-
 import redis.clients.jedis.Jedis;
 import redis.clients.jedis.JedisPool;
 
 import java.io.IOException;
-import java.util.*;
-
 import java.nio.charset.Charset;
 import java.nio.charset.CharsetDecoder;
-import java.util.stream.Collectors;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import java.util.*;
 
 @Component
 public class EventBatchProcessor {
@@ -71,17 +68,17 @@ public class EventBatchProcessor {
         try (JedisPool pool = new JedisPool(redisConfig.getHost(), redisConfig.getPort())) {
             try (Jedis jedis = pool.getResource()) {
 
-                List<String> currentUpdateRequests = new ArrayList<>();
                 int i = 1;
+                Set<Pair> indicatorFieldsToBeUpdated = new HashSet<>();
 
                 for (Record record : records) {
                     try {
 
-                        if (currentUpdateRequests.size() > elasticsearchConfig.getDocumentUpdateChunkSize()) {
+                        if (indicatorFieldsToBeUpdated.size() > elasticsearchConfig.getDocumentUpdateChunkSize()) {
 
+                            List<String> currentUpdateRequests = generateUpdateRequests(jedis, indicatorFieldsToBeUpdated);
                             final RestClient restClient = elasticsearchRequestManager.getRestClient();
                             updateDocuments(restClient, currentUpdateRequests);
-                            currentUpdateRequests = new ArrayList<>();
                             restClient.close();
                         }
 
@@ -92,12 +89,12 @@ public class EventBatchProcessor {
 
                         if (docIdToBeDeleted != null) {
 
-                            List<String> updateRequests = handleDeletion(jedis, docIdToBeDeleted);
-                            currentUpdateRequests.addAll(updateRequests);
+                            Set<Pair> affectedIndicatorFields = handleDeletion(jedis, docIdToBeDeleted);
+                            indicatorFieldsToBeUpdated.addAll(affectedIndicatorFields);
 
 
                             LOGGER.info("Received {} update requests due to deletion of {} ({}/{}).",
-                                    updateRequests.size(), docIdToBeDeleted, i, records.size());
+                                    affectedIndicatorFields.size(), docIdToBeDeleted, i, records.size());
                             i++;
 
                             continue;
@@ -114,13 +111,12 @@ public class EventBatchProcessor {
 
                         waitForRedis(jedis);
 
-                        List<String> docIdsToBeUpdated = calculateIndicators(jedis, docId, tagProvider, tagMap);
-                        List<String> updateRequests = generateUpdateRequests(jedis, tagProvider, docIdsToBeUpdated);
+                        Set<Pair> indicatorFields = calculateIndicators(jedis, docId, tagProvider, tagMap);
 
-                        currentUpdateRequests.addAll(updateRequests);
+                        indicatorFieldsToBeUpdated.addAll(indicatorFields);
 
                         LOGGER.info("Received {} update requests due to update/creation of {} ({}/{}).",
-                                docIdsToBeUpdated.size(), docId, i, records.size());
+                                indicatorFieldsToBeUpdated.size(), docId, i, records.size());
                         i++;
 
                     } catch (IOException e) {
@@ -131,6 +127,7 @@ public class EventBatchProcessor {
                 }
 
                 try {
+                    List<String> currentUpdateRequests = generateUpdateRequests(jedis, indicatorFieldsToBeUpdated);
                     final RestClient restClient = elasticsearchRequestManager.getRestClient();
                     updateDocuments(restClient, currentUpdateRequests);
                     restClient.close();
@@ -148,23 +145,22 @@ public class EventBatchProcessor {
                 processTimeInMs/records.size());
     }
 
-    private List<String> handleDeletion(Jedis jedis, String docIdToBeDeleted) {
-        List<String> updateRequestsForBatch = new ArrayList<>();
+    private Set<Pair> handleDeletion(Jedis jedis, String docIdToBeDeleted) {
+        Set<Pair> indicatorFieldsForBatch = new HashSet<>();
         for (String provider : getTagProviders()) {
 
-            List<String> docIdsToBeUpdated = removeIndicators(jedis, docIdToBeDeleted, provider);
+            Set<Pair> indicatorFieldsToBeUpdated = removeIndicators(jedis, docIdToBeDeleted, provider);
 
-            List<String> updateRequests = generateUpdateRequests(jedis, provider, docIdsToBeUpdated);
-            if (CollectionUtils.isEmpty(updateRequests)) {
+            if (CollectionUtils.isEmpty(indicatorFieldsToBeUpdated)) {
                 continue;
             }
-            updateRequestsForBatch.addAll(updateRequests);
+            indicatorFieldsForBatch.addAll(indicatorFieldsToBeUpdated);
         }
-        return updateRequestsForBatch;
+        return indicatorFieldsForBatch;
     }
 
-    private List<String> removeIndicators(Jedis jedis, String docIdToBeDeleted, String tagProvider) {
-        List<String> docIdsToBeUpdated = new ArrayList<>();
+    private Set<Pair> removeIndicators(Jedis jedis, String docIdToBeDeleted, String tagProvider) {
+        Set<Pair> indicatorFieldsToBeUpdated = new HashSet<>();
         String indicatorsKey = getIndicatorsKey(tagProvider, docIdToBeDeleted);
         Map<String, String> indicatorsMap = jedis.hgetAll(indicatorsKey);
 
@@ -173,14 +169,14 @@ public class EventBatchProcessor {
             for (String affectedDocId : indicatorsMap.keySet()) {
                 String affectedIndicatorsKey = getIndicatorsKey(tagProvider, affectedDocId);
                 jedis.hdel(affectedIndicatorsKey, docIdToBeDeleted);
-                docIdsToBeUpdated.add(affectedDocId);
+                indicatorFieldsToBeUpdated.add(Pair.of(affectedDocId, tagProvider));
             }
         }
 
         jedis.del(indicatorsKey);
-        docIdsToBeUpdated.add(docIdToBeDeleted);
+        indicatorFieldsToBeUpdated.add(Pair.of(docIdToBeDeleted, tagProvider));
 
-        return docIdsToBeUpdated;
+        return indicatorFieldsToBeUpdated;
     }
 
     private String checkActionAndGetId (JsonNode jsonObject) {
@@ -207,8 +203,10 @@ public class EventBatchProcessor {
         }
     }
 
-    private List<String> calculateIndicators(Jedis jedis, String docId, String tagProvider, HashMap<String, Double> tagMap) {
-        List<String> docIdsToBeUpdated = new ArrayList<>();
+    private Set<Pair> calculateIndicators(
+            Jedis jedis, String docId, String tagProvider, HashMap<String, Double> tagMap) {
+
+        Set<Pair> indicatorFieldsToBeUpdated = new HashSet<>();
 
         String indicatorsKey = getIndicatorsKey(tagProvider, docId);
         boolean hasAnyTagChanged = false;
@@ -230,7 +228,7 @@ public class EventBatchProcessor {
                     }
 
                     hasAnyTagChanged = true;
-                    docIdsToBeUpdated.add(similarDocId);
+                    indicatorFieldsToBeUpdated.add(Pair.of(similarDocId, tagProvider));
 
                     Double similarDocWeight = Double.parseDouble(termStringMap.get(similarDocId));
 
@@ -250,14 +248,14 @@ public class EventBatchProcessor {
             // LOGGER.info("This is the termMap called {}: {}", termKey, jedis.hgetAll(termKey));
         }
         if (hasAnyTagChanged) {
-            docIdsToBeUpdated.add(docId);
+            indicatorFieldsToBeUpdated.add(Pair.of(docId, tagProvider));
         }
 
         // LOGGER.info("This is the indicatorsMap called {}: {}", indicatorsKey, jedis.hgetAll(indicatorsKey));
 
-        // LOGGER.info("These are the docIdsToBeUpdated: " + docIdsToBeUpdated);
+        // LOGGER.info("These are the indicatorFieldsToBeUpdated: " + indicatorFieldsToBeUpdated);
 
-        return docIdsToBeUpdated;
+        return indicatorFieldsToBeUpdated;
     }
 
     private Double getTagWeightDiff(Double tagWeight, String previousWeightString) {
@@ -288,9 +286,13 @@ public class EventBatchProcessor {
         return false;
     }
 
-    private List<String> generateUpdateRequests(Jedis jedis, String tagProvider, List<String> docIdsToBeUpdated) {
+    private List<String> generateUpdateRequests(Jedis jedis, Set<Pair> indicatorFieldsToBeUpdated) {
+
         List<String> updateRequests = new ArrayList<>();
-        for (String id : docIdsToBeUpdated) {
+
+        for (Pair indicatorPair : indicatorFieldsToBeUpdated) {
+            String id = (String) indicatorPair.getKey();
+            String tagProvider = (String) indicatorPair.getValue();
             String key = getIndicatorsKey(tagProvider, id);
             Map<String, String> indicators = jedis.hgetAll(key);
 
@@ -308,7 +310,7 @@ public class EventBatchProcessor {
                 String updateRequest = elasticsearchRequestManager.buildIndicatorsUpdateRequest(id, indicatorFieldsAsJsonString);
                 updateRequests.add(updateRequest);
 
-                // LOGGER.info("This is an update request: " + updateRequest);
+                LOGGER.info("This is an update request: " + updateRequest);
             }
         }
 
