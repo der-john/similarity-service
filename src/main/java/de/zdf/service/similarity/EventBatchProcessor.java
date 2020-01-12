@@ -363,7 +363,7 @@ public class EventBatchProcessor {
                 String updateRequest = elasticsearchRequestManager.buildIndicatorsUpdateRequest(id, indicatorFieldsAsJsonString);
                 updateRequests.add(updateRequest);
 
-                LOGGER.info("This is an update request: " + updateRequest);
+                // LOGGER.info("This is an update request: " + updateRequest);
             }
         }
 
@@ -438,9 +438,6 @@ public class EventBatchProcessor {
                         updateRequestCounter, documentCount);
             }
             offset += chunkSize;
-        }
-        if (documentCount > 0) {
-            LOGGER.info("{}: {} of {} Documents updated succesfully.", name(), totalUpdateCount, documentCount);
         }
     }
 
