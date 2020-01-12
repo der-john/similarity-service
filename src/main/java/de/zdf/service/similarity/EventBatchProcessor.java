@@ -86,6 +86,8 @@ public class EventBatchProcessor {
                             final RestClient restClient = elasticsearchRequestManager.getRestClient();
                             updateDocuments(restClient, currentUpdateRequests);
                             restClient.close();
+
+                            indicatorFieldsForBatch = new HashSet<>();
                         }
 
                         String dataString = DECODER.decode(record.getData()).toString();
