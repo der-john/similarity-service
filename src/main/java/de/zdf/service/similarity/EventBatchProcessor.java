@@ -69,14 +69,14 @@ public class EventBatchProcessor {
             try (Jedis jedis = pool.getResource()) {
 
                 int i = 1;
-                Set<Pair> indicatorFieldsToBeUpdated = new HashSet<>();
+                Set<Pair> indicatorFieldsForBatch = new HashSet<>();
 
                 for (Record record : records) {
                     try {
 
-                        if (indicatorFieldsToBeUpdated.size() > elasticsearchConfig.getDocumentUpdateChunkSize()) {
+                        if (indicatorFieldsForBatch.size() > elasticsearchConfig.getDocumentUpdateChunkSize()) {
 
-                            List<String> currentUpdateRequests = generateUpdateRequests(jedis, indicatorFieldsToBeUpdated);
+                            List<String> currentUpdateRequests = generateUpdateRequests(jedis, indicatorFieldsForBatch);
                             final RestClient restClient = elasticsearchRequestManager.getRestClient();
                             updateDocuments(restClient, currentUpdateRequests);
                             restClient.close();
@@ -90,7 +90,7 @@ public class EventBatchProcessor {
                         if (docIdToBeDeleted != null) {
 
                             Set<Pair> affectedIndicatorFields = handleDeletion(jedis, docIdToBeDeleted);
-                            indicatorFieldsToBeUpdated.addAll(affectedIndicatorFields);
+                            indicatorFieldsForBatch.addAll(affectedIndicatorFields);
 
 
                             LOGGER.info("Received {} update requests due to deletion of {} ({}/{}).",
@@ -113,10 +113,10 @@ public class EventBatchProcessor {
 
                         Set<Pair> indicatorFields = calculateIndicators(jedis, docId, tagProvider, tagMap);
 
-                        indicatorFieldsToBeUpdated.addAll(indicatorFields);
+                        indicatorFieldsForBatch.addAll(indicatorFields);
 
                         LOGGER.info("Received {} update requests due to update/creation of {} ({}/{}).",
-                                indicatorFieldsToBeUpdated.size(), docId, i, records.size());
+                                indicatorFields.size(), docId, i, records.size());
                         i++;
 
                     } catch (IOException e) {
@@ -127,7 +127,7 @@ public class EventBatchProcessor {
                 }
 
                 try {
-                    List<String> currentUpdateRequests = generateUpdateRequests(jedis, indicatorFieldsToBeUpdated);
+                    List<String> currentUpdateRequests = generateUpdateRequests(jedis, indicatorFieldsForBatch);
                     final RestClient restClient = elasticsearchRequestManager.getRestClient();
                     updateDocuments(restClient, currentUpdateRequests);
                     restClient.close();
