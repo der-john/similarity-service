@@ -54,6 +54,9 @@ public class EventBatchProcessor {
     @Value("${similarity.maxIndicators:25}")
     private Integer maxIndicators;
 
+    @Value("${similarity.maxDocsPerTerm:30}")
+    private Integer maxDocsPerTerm;
+
     private String[] getTagProviders() {
         return tagProvidersString.trim().split(",");
     }
@@ -222,11 +225,30 @@ public class EventBatchProcessor {
 
             Map<String, String> termStringMap = jedis.hgetAll(termKey);
             if (MapUtils.isNotEmpty(termStringMap)) {
+                TreeMap<Double, String> termMap = convertToTreeMap(termStringMap);
+
+                if (termMap.size() + 1 > maxDocsPerTerm) {
+                    Double lowestScoreInMap = termMap.firstKey();
+                    if (tagWeight < lowestScoreInMap) {
+                        continue;
+                    }
+                    jedis.hdel(termKey, termMap.firstEntry().getValue());
+                    termMap.remove(termMap.firstKey());
+                }
+
+                // cleanup legacy inflated maps
+                while (termMap.size() > maxDocsPerTerm) {
+                    jedis.hdel(termKey, termMap.firstEntry().getValue());
+                    termMap.remove(termMap.firstKey());
+                }
+
+                jedis.hset(termKey, tagName, tagWeight.toString());
+                termMap.put(tagWeight, tagName);
 
                 Double weightDiff = getTagWeightDiff(tagWeight, termStringMap.get(docId));
                 if (weightDiff == null) continue;
 
-                for (String similarDocId : termStringMap.keySet()) {
+                for (String similarDocId : termMap.values()) {
                     if (similarDocId.equals(docId)) {
                         continue;
                     }
@@ -251,9 +273,10 @@ public class EventBatchProcessor {
 
                     jedis.hset(indicatorsKey, similarDocId, newSimilarity.toString());
                 }
+            } else {
+                hasAnyTagChanged = true;
+                jedis.hset(termKey, docId, tagWeight.toString());
             }
-
-            jedis.hset(termKey, docId, tagWeight.toString());
 
             // LOGGER.info("This is the termMap called {}: {}", termKey, jedis.hgetAll(termKey));
         }
@@ -266,6 +289,15 @@ public class EventBatchProcessor {
         // LOGGER.info("These are the indicatorFieldsToBeUpdated: " + indicatorFieldsToBeUpdated);
 
         return indicatorFieldsToBeUpdated;
+    }
+
+    private static final TreeMap<Double, String> convertToTreeMap(Map<String, String> termStringMap) {
+        TreeMap<Double, String> treeMap = new TreeMap<>();
+        for (String docId : termStringMap.keySet()) {
+            Double score = Double.parseDouble(termStringMap.get(docId));
+            treeMap.put(score, docId);
+        }
+        return treeMap;
     }
 
     private Double getTagWeightDiff(Double tagWeight, String previousWeightString) {
