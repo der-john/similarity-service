@@ -214,6 +214,10 @@ public class EventBatchProcessor {
         for (String tagName : tagMap.keySet()) {
 
             Double tagWeight = tagMap.get(tagName);
+            if (tagWeight == 0d) {
+                continue;
+            }
+
             String termKey = getTermKey(tagProvider, tagName);
 
             Map<String, String> termStringMap = jedis.hgetAll(termKey);
@@ -227,10 +231,16 @@ public class EventBatchProcessor {
                         continue;
                     }
 
+                    Double similarDocWeight = Double.parseDouble(termStringMap.get(similarDocId));
+
+                    // cleanup legacy zero-score entries
+                    if (similarDocWeight == 0d) {
+                        jedis.hdel(termKey, similarDocId);
+                        continue;
+                    }
+
                     hasAnyTagChanged = true;
                     indicatorFieldsToBeUpdated.add(Pair.of(similarDocId, tagProvider));
-
-                    Double similarDocWeight = Double.parseDouble(termStringMap.get(similarDocId));
 
                     Double previousSimilarity = 0d;
                     String previousSimilarityString = jedis.hget(indicatorsKey, similarDocId);
