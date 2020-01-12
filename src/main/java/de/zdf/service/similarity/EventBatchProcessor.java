@@ -367,7 +367,7 @@ public class EventBatchProcessor {
             for (Map.Entry<String, String> indicatorStringPair : indicatorStringMap.entrySet()) {
                 indicators.put(indicatorStringPair.getKey(), Double.parseDouble(indicatorStringPair.getValue()));
             }
-            Map<String, Double> sortedIndicators = sortByValueAndCap(indicators);
+            Map<String, Double> sortedIndicators = returnSubmapOfHighestValues(indicators, maxIndicators);
 
             ArrayNode indicatorsArray = mapper.createArrayNode();
 
@@ -434,12 +434,12 @@ public class EventBatchProcessor {
     }
 
     // cf https://stackoverflow.com/questions/109383/sort-a-mapkey-value-by-values
-    private Map<String, Double> sortByValueAndCap(Map<String, Double> map) {
+    private static final HashMap<String, Double> returnSubmapOfHighestValues(Map<String, Double> map, int submapSize) {
         List<Map.Entry<String, Double>> list = new ArrayList<>(map.entrySet());
-        list.sort(Map.Entry.comparingByValue());
+        list.sort(Collections.reverseOrder(Map.Entry.comparingByValue()));
 
-        Map<String, Double> result = new LinkedHashMap<>();
-        int upperBound = Math.min(maxIndicators, list.size());
+        HashMap<String, Double> result = new LinkedHashMap<>();
+        int upperBound = Math.min(submapSize, list.size());
         for (Map.Entry<String, Double> entry : list.subList(0, upperBound)) {
             result.put(entry.getKey(), entry.getValue());
         }
