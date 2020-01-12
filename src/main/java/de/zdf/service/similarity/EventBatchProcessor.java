@@ -271,7 +271,14 @@ public class EventBatchProcessor {
                     }
                     Double newSimilarity = previousSimilarity + weightDiff * similarDocWeight;
 
-                    jedis.hset(indicatorsKey, similarDocId, newSimilarity.toString());
+                    String similarDocIndicatorsKey = getIndicatorsKey(similarDocId, tagProvider);
+                    if (newSimilarity == 0d) {
+                        jedis.hdel(indicatorsKey, similarDocId);
+                        jedis.hdel(similarDocIndicatorsKey, docId);
+                    } else {
+                        jedis.hset(indicatorsKey, similarDocId, newSimilarity.toString());
+                        jedis.hset(similarDocIndicatorsKey, docId, newSimilarity.toString());
+                    }
                 }
             } else {
                 hasAnyTagChanged = true;
