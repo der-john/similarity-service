@@ -52,3 +52,11 @@ elasticsearch:
   # authToken: "Basic YXdzX2Vsc2FjOmFpbWllRjdSCg"
   username: aws_elsac
   password: aimieF7R
+
+
+similarity:
+  tagProviders: corpus,googleLanguage
+  minWeightDiff: 0.001
+  maxIndicators: 25
+  maxDocsPerTerm: 30
+  maxTermsPerDoc: 15

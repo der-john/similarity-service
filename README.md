@@ -2,15 +2,11 @@
 
 Calculates recommendations on the basis of tags created by CorpusTagProvider, TrioTagProvider etc.
 
-*ToDos Stand 11.1.2020*:
-
-- `generateUpdateRequests` erst kurz vor dem Batch Update gebündelt durchführen, und zwar muss man sich dazu statt `docIdsToBeUpdated` eine Liste merken, die Paare aus docId + tagProvider enthält! Dann sollten circa 10 - 100 (!) mal weniger Update Requests geschrieben werden. :)
-
-    - Zu Performance-Zwecken: In Term-Hashmaps nur die 40(?) Docs mit den höchsten Scores vorhalten. (Dazu könnte man LinkedHashMaps verwenden, um in den Term-Hashmaps immer schnell das niedrigst bewertete Doc durch ein höher bewertetes Doc zu ersetzen.)
-    
-    - (?) Zu Performance-Zwecken: Nur die 20(?) Tags mit den höchsten Scores für Berechnungen verwenden. (Dazu könnte man LinkedHashMaps verwenden, um in den Tags-Hashmaps immer schnell das niedrigst bewertete Tag durch ein höher bewertetes Tag zu ersetzen.)
+*ToDos Stand 12.1.2020*:
 
 - In Redis Hashmaps mit den aktuellen Tags jedes Docs vorhalten, um entfernte Tags wieder aus ihren Hashmaps zu löschen und die Indicator-Scores dann dementsprechend zu verringern. (Notwendig für korrekte Scores!) ;)
+
+- Unit Tests
 
 - ...
 
