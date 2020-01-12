@@ -57,6 +57,9 @@ public class EventBatchProcessor {
     @Value("${similarity.maxDocsPerTerm:30}")
     private Integer maxDocsPerTerm;
 
+    @Value("${similarity.maxTermsPerDoc:15}")
+    private Integer maxTermsPerDoc;
+
     private String[] getTagProviders() {
         return tagProvidersString.trim().split(",");
     }
@@ -110,7 +113,8 @@ public class EventBatchProcessor {
                         String docId = kinesisJson.get("docId").textValue();
                         String tagProvider = kinesisJson.get("tagProvider").textValue();
 
-                        HashMap<String, Double> tagMap = getTagMap(kinesisJson);
+                        HashMap<String, Double> kinesisTagMap = getKinesisTagMap(kinesisJson);
+                        HashMap<String, Double> tagMap = returnSubmapOfHighestValues(kinesisTagMap, maxTermsPerDoc);
 
                         waitForRedis(jedis);
 
@@ -147,7 +151,6 @@ public class EventBatchProcessor {
                 records.size(),
                 processTimeInMs/records.size());
     }
-
     private Set<Pair> handleDeletion(Jedis jedis, String docIdToBeDeleted) {
         Set<Pair> indicatorFieldsForBatch = new HashSet<>();
         for (String provider : getTagProviders()) {
@@ -285,7 +288,7 @@ public class EventBatchProcessor {
                 jedis.hset(termKey, docId, tagWeight.toString());
             }
 
-            // LOGGER.info("This is the termMap called {}: {}", termKey, jedis.hgetAll(termKey));
+            LOGGER.info("This is the termMap called {}: {}", termKey, jedis.hgetAll(termKey));
         }
         if (hasAnyTagChanged) {
             indicatorFieldsToBeUpdated.add(Pair.of(docId, tagProvider));
@@ -454,7 +457,7 @@ public class EventBatchProcessor {
         return result;
     }
 
-    private static final HashMap<String, Double> getTagMap(ObjectNode kinesisJson) {
+    private static final HashMap<String, Double> getKinesisTagMap(ObjectNode kinesisJson) {
         JsonNode kinesisTags = kinesisJson.get("tags");
         HashMap<String, Double> tagMap = new HashMap<>();
         for (JsonNode kinesisTag : kinesisTags) {
