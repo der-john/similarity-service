@@ -55,7 +55,7 @@ elasticsearch:
 
 
 similarity:
-  tagProviders: corpus,googleLanguage
+  tagProviders: corpus,googlelanguage,onto
   minWeightDiff: 0.001
   maxIndicators: 25
   maxDocsPerTerm: 30
