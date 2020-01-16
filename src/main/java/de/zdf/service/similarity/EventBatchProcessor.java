@@ -247,15 +247,14 @@ public class EventBatchProcessor {
                     termMap.remove(termMap.firstKey());
                 }
 
-                jedis.hset(termKey, tagName, tagWeight.toString());
-                termMap.put(tagWeight, tagName);
-
                 Double weightDiff = getTagWeightDiff(tagWeight, termStringMap.get(docId));
                 if (weightDiff == null) continue;
 
                 for (Map.Entry<Double, String> entry : termMap.entrySet()) {
                     String similarDocId = entry.getValue();
                     if (similarDocId.equals(docId)) {
+                        jedis.hset(termKey, docId, tagWeight.toString());
+                        termMap.put(tagWeight, docId);
                         continue;
                     }
 
