@@ -6,7 +6,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import de.zdf.service.similarity.config.ElasticsearchConfig;
 import de.zdf.service.similarity.config.RedisConfig;
-import de.zdf.service.similarity.elasticsearch.ElasticsearchRequestManager;
+import de.zdf.service.similarity.elasticsearch.ElasticsearchEngine;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.collections.MapUtils;
 import org.apache.commons.lang3.StringUtils;
@@ -39,7 +39,7 @@ public class EventBatchProcessor {
     @Autowired
     private ElasticsearchConfig elasticsearchConfig;
     @Autowired
-    private ElasticsearchRequestManager elasticsearchRequestManager;
+    private ElasticsearchEngine elasticsearchRequestManager;
     @Autowired
     private ObjectMapper mapper;
 

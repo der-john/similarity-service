@@ -31,11 +31,11 @@ import redis.clients.jedis.Jedis;
 import static de.zdf.service.similarity.util.SimilarityUtil.*;
 
 @Component
-public class ElasticsearchRequestManager {
+public class ElasticsearchEngine {
 
 	private static final String POST = "POST";
 	
-	private static final Logger LOGGER = LoggerFactory.getLogger(ElasticsearchRequestManager.class);
+	private static final Logger LOGGER = LoggerFactory.getLogger(ElasticsearchEngine.class);
 
 
 	private final String indicatorsUpdateRequestTemplate = "{ \"doc\" : %s }";
