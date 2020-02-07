@@ -1,10 +1,8 @@
 package de.zdf.service.similarity;
 
 import com.amazonaws.services.kinesis.model.Record;
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import de.zdf.service.similarity.config.ElasticsearchConfig;
 import de.zdf.service.similarity.config.RedisConfig;
@@ -13,9 +11,6 @@ import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.collections.MapUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.tuple.Pair;
-import org.apache.http.StatusLine;
-import org.elasticsearch.client.Response;
-import org.elasticsearch.client.RestClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -28,6 +23,9 @@ import java.io.IOException;
 import java.nio.charset.Charset;
 import java.nio.charset.CharsetDecoder;
 import java.util.*;
+
+import static de.zdf.service.similarity.util.SimilarityUtil.*;
+
 
 @Component
 public class EventBatchProcessor {
@@ -50,9 +48,6 @@ public class EventBatchProcessor {
 
     @Value("${similarity.minWeightDiff:0.0001}")
     private Double minWeightDiff;
-
-    @Value("${similarity.maxIndicators:25}")
-    private Integer maxIndicators;
 
     @Value("${similarity.maxDocsPerTerm:30}")
     private Integer maxDocsPerTerm;
@@ -82,10 +77,7 @@ public class EventBatchProcessor {
 
                         if (indicatorFieldsForBatch.size() > elasticsearchConfig.getDocumentUpdateChunkSize()) {
 
-                            List<String> currentUpdateRequests = generateUpdateRequests(jedis, indicatorFieldsForBatch);
-                            final RestClient restClient = elasticsearchRequestManager.getRestClient();
-                            updateDocuments(restClient, currentUpdateRequests);
-                            restClient.close();
+                            elasticsearchRequestManager.generateAndPerformBulkUpdates(jedis, indicatorFieldsForBatch);
 
                             indicatorFieldsForBatch = new HashSet<>();
                         }
@@ -136,11 +128,7 @@ public class EventBatchProcessor {
                 }
 
                 try {
-                    List<String> currentUpdateRequests = generateUpdateRequests(jedis, indicatorFieldsForBatch);
-                    final RestClient restClient = elasticsearchRequestManager.getRestClient();
-                    updateDocuments(restClient, currentUpdateRequests);
-                    restClient.close();
-
+                    elasticsearchRequestManager.generateAndPerformBulkUpdates(jedis, indicatorFieldsForBatch);
                 } catch (IOException e) {
                     LOGGER.error("IO Exception: ", e);
                 }
@@ -153,6 +141,7 @@ public class EventBatchProcessor {
                 records.size(),
                 processTimeInMs/records.size());
     }
+
     private Set<Pair> handleDeletion(Jedis jedis, String docIdToBeDeleted) {
         Set<Pair> indicatorFieldsForBatch = new HashSet<>();
         for (String provider : getTagProviders()) {
@@ -338,139 +327,5 @@ public class EventBatchProcessor {
             return true;
         }
         return false;
-    }
-
-    private List<String> generateUpdateRequests(Jedis jedis, Set<Pair> indicatorFieldsToBeUpdated) {
-
-        List<String> updateRequests = new ArrayList<>();
-
-        for (Pair indicatorPair : indicatorFieldsToBeUpdated) {
-            String id = (String) indicatorPair.getKey();
-            String tagProvider = (String) indicatorPair.getValue();
-            String key = getIndicatorsKey(tagProvider, id);
-            Map<String, String> indicators = jedis.hgetAll(key);
-
-            String indicatorFields;
-            if (indicators.size() == 0) {
-                String tagProviderKey = tagProvider + elasticsearchConfig.getIndicatorsFieldSuffix();
-                indicatorFields = String.format("{ \"%s\": [] }", tagProviderKey);
-            } else {
-                indicatorFields = buildIndicatorFields(indicators, tagProvider);
-            }
-            String indicatorFieldsAsJsonString = String.format(
-                    elasticsearchRequestManager.getIndicatorsUpdateRequestTemplate(),
-                    indicatorFields);
-            if (indicatorFieldsAsJsonString != null) {
-                String updateRequest = elasticsearchRequestManager.buildIndicatorsUpdateRequest(id, indicatorFieldsAsJsonString);
-                updateRequests.add(updateRequest);
-
-                // LOGGER.info("This is an update request: " + updateRequest);
-            }
-        }
-
-        return updateRequests;
-    }
-
-    private String buildIndicatorFields(Map<String, String> indicatorStringMap, String tagProvider) {
-        ObjectNode indicatorFields = mapper.createObjectNode();
-        try {
-
-            Map<String, Double> indicators = new HashMap<>();
-            for (Map.Entry<String, String> indicatorStringPair : indicatorStringMap.entrySet()) {
-                indicators.put(indicatorStringPair.getKey(), Double.parseDouble(indicatorStringPair.getValue()));
-            }
-            Map<String, Double> sortedIndicators = returnSubmapOfHighestValues(indicators, maxIndicators);
-
-            ArrayNode indicatorsArray = mapper.createArrayNode();
-
-            for (String docId : sortedIndicators.keySet()) {
-                ObjectNode indicator = mapper.createObjectNode();
-                indicator.put("id", docId);
-                indicator.put("rating", indicators.get(docId));
-                indicatorsArray.add(indicator);
-            }
-            String tagProviderKey = tagProvider + elasticsearchConfig.getIndicatorsFieldSuffix();
-            indicatorFields.set(tagProviderKey, indicatorsArray);
-
-        } catch (Exception e) {
-            LOGGER.error("JSON exception while building indicators field json:" + e);
-        }
-        try {
-            return mapper.writeValueAsString(indicatorFields);
-        } catch (JsonProcessingException e) {
-            LOGGER.error("JSON exception while processing " + indicatorFields);
-            return null;
-        }
-    }
-
-    public void updateDocuments(RestClient restClient, List<String> allIndicatorsUpdateRequests) {
-
-        int chunkSize = elasticsearchConfig.getDocumentUpdateChunkSize();
-        int offset = 0;
-        int documentCount = allIndicatorsUpdateRequests.size();
-        int totalUpdateCount = 0;
-
-        while (offset < allIndicatorsUpdateRequests.size()) {
-            StringBuffer bulkRequest = new StringBuffer();
-            List<String> updateRequestChunk = allIndicatorsUpdateRequests.subList(offset, Math.min(offset + chunkSize, allIndicatorsUpdateRequests.size()));
-
-            int updateRequestCounter = updateRequestChunk.size();
-            updateRequestChunk.forEach(updateRequest -> bulkRequest.append(updateRequest));
-
-            if (updateRequestCounter > 0) {
-                // LOGGER.info("{}: Sending Bulk-Request for {} Document-Updates ...", name(), updateRequestCounter);
-                // LOGGER.info(bulkRequest.toString());
-                Response bulkResponse = elasticsearchRequestManager.performBulkRequest(restClient, bulkRequest.toString());
-                if (null == bulkResponse || null == bulkResponse.getStatusLine()) {
-                    LOGGER.warn("ES bulk request failed and didn't even throw a response.");
-                    return;
-                }
-                StatusLine statusLine = bulkResponse.getStatusLine();
-                if (statusLine.getStatusCode() < 400) {
-                    LOGGER.info(statusLine.toString());
-                    LOGGER.info("{}: {} Documents updated successfully (total number of Documents: {}).", name(),
-                            updateRequestCounter, documentCount);
-                    totalUpdateCount += updateRequestCounter;
-                } else {
-                    LOGGER.warn("ES bulk request threw status code {}: {}", statusLine.getStatusCode(), statusLine.getReasonPhrase());
-                }
-            } else {
-                LOGGER.info("{}: Index is already up to date. {} Documents updated (total number of Documents: {}).", name(),
-                        updateRequestCounter, documentCount);
-            }
-            offset += chunkSize;
-        }
-    }
-
-    // cf https://stackoverflow.com/questions/109383/sort-a-mapkey-value-by-values
-    private static final HashMap<String, Double> returnSubmapOfHighestValues(Map<String, Double> map, int submapSize) {
-        List<Map.Entry<String, Double>> list = new ArrayList<>(map.entrySet());
-        list.sort(Collections.reverseOrder(Map.Entry.comparingByValue()));
-
-        HashMap<String, Double> result = new LinkedHashMap<>();
-        int upperBound = Math.min(submapSize, list.size());
-        for (Map.Entry<String, Double> entry : list.subList(0, upperBound)) {
-            result.put(entry.getKey(), entry.getValue());
-        }
-
-        return result;
-    }
-
-    private static final HashMap<String, Double> getKinesisTagMap(ObjectNode kinesisJson) {
-        JsonNode kinesisTags = kinesisJson.get("tags");
-        HashMap<String, Double> tagMap = new HashMap<>();
-        for (JsonNode kinesisTag : kinesisTags) {
-            tagMap.put(kinesisTag.get("name").textValue(), kinesisTag.get("weight").asDouble());
-        }
-        // LOGGER.info("This is the tag map : " + tagMap.toString());
-        return tagMap;
-    }
-
-    private static final String getTermKey(String tagProvider, String tagName) {
-        return (tagProvider + "_term_" + tagName);
-    }
-
-    private static final String getIndicatorsKey(String tagProvider, String docId) {
-        return (tagProvider + "_indicators_" + docId);
     }
 }
