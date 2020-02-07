@@ -92,7 +92,6 @@ public class EventBatchProcessor {
                             Set<Pair> affectedIndicatorFields = handleDeletion(jedis, docIdToBeDeleted);
                             indicatorFieldsForBatch.addAll(affectedIndicatorFields);
 
-
                             LOGGER.info("Received {} update requests due to deletion of {} ({}/{}).",
                                     affectedIndicatorFields.size(), docIdToBeDeleted, i, records.size());
                             i++;
