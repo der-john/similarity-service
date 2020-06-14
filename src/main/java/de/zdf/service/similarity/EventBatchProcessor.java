@@ -278,15 +278,15 @@ public class EventBatchProcessor {
                 jedis.hset(termKey, docId, tagWeight.toString());
             }
 
-            LOGGER.info("This is the termMap called {}: {}", termKey, jedis.hgetAll(termKey));
+            LOGGER.debug("This is the termMap called {}: {}", termKey, jedis.hgetAll(termKey));
         }
         if (hasAnyTagChanged) {
             indicatorFieldsToBeUpdated.add(Pair.of(docId, tagProvider));
         }
 
-        // LOGGER.info("This is the indicatorsMap called {}: {}", indicatorsKey, jedis.hgetAll(indicatorsKey));
+        LOGGER.debug("This is the indicatorsMap called {}: {}", indicatorsKey, jedis.hgetAll(indicatorsKey));
 
-        // LOGGER.info("These are the indicatorFieldsToBeUpdated: " + indicatorFieldsToBeUpdated);
+        LOGGER.debug("These are the indicatorFieldsToBeUpdated: " + indicatorFieldsToBeUpdated);
 
         return indicatorFieldsToBeUpdated;
     }
