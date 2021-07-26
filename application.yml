@@ -51,13 +51,13 @@ redis:
 ########################################
 elasticsearch:
   protocol: https
-  host: zdf-test-kznrea-15782.exozet.com
+  host: *******
   port: 443
   basePath: "/elasticsearch"
   useAuthHeader: true
   isBearer: false
   authField: "Authorization"
-  authToken: "Basic c25yOkhpZTlzaWV2"
+  authToken: "Basic ******"
 
 similarity:
   tagProviders: corpus,googlelanguage,onto
